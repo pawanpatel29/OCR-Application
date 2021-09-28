@@ -1,0 +1,468 @@
+import React, { useState } from 'react'
+import { connect } from 'react-redux'
+import { ToastContainer, toast } from 'react-toastify';
+import logo from '../../src/logo.svg'
+import { NavLink, Link } from 'react-router-dom'
+import axios from "axios";
+import Path from 'path';
+
+import { getNotification, storeScrollYPosition } from '../actions/workOrderActions'
+import uploadFileToBlob, { getBlobsInContainer} from './azure-storage-blob.js';
+
+// let fileData = '';
+let fileData1 = '';
+let fileData2 = '';
+
+class Home extends React.Component {
+  constructor(props) {
+    super(props)
+    this.state = {
+      show: false,
+      inputFile: [],
+      inputFile2: [],
+      listItems: [],
+      actualFile: '',
+      actualFile2: '',
+      blobList: [],
+      next: false,
+      fileSelected: null,
+      fileSelected2: null
+    };
+    this.faultImageInput = React.createRef();
+    this.faultImageInput2 = React.createRef();
+  }
+
+  componentDidMount() {
+    //this.getBlobsInContainer();
+    this.updateUser();
+  }
+
+  updateUser() {
+    this.props.getNotification().then(data => {
+      console.log("1234567", data)
+      const temp = data && data.payload ? data.payload : []
+      this.setState({
+        listItems: temp,
+      })
+    })
+  }
+
+  notify() { toast("Wow so easy !"); }
+
+  backToDashboard(data) {
+    let arr = []
+    var list = this.state.notItems
+    if (list && list.length > 0) {
+      list.map(item => {
+        item.show = false
+        arr.push(item)
+      })
+      this.setState({
+        notItems: arr,
+        selectedId: data
+      })
+    }
+    this.setState({
+      banner: true,
+      show: false,
+      notificationOpen1: false,
+      notificationOpen2: false
+    })
+  }
+
+
+  // onFileChange = (event) => {
+  //   // capture file into state
+  //   this.setState({fileSelected: event});   
+  // };
+
+  // onFileChange = (event) => {
+  //   let file = event
+  //   const transId = this.props.getScrollYPositionValue ? this.props.getScrollYPositionValue.id : ''
+  //   let fileName = `#${transId}_OCR.${event.name.split('.').pop()}`
+  //   file = new File([file], fileName, { type: file.type });
+  //   console.log("file", file)
+  //   fileData = file;
+  //   this.setState({ fileSelected: file });
+  //   debugger;
+  // };
+
+   onFileChange1 = (event) => {
+    let file1 = event
+    const transId = this.props.getScrollYPositionValue ? this.props.getScrollYPositionValue.id : ''
+    let fileName1 = `${transId}_Reason.${event.name.split('.').pop()}`
+    file1 = new File([file1], fileName1, { type: file1.type });
+    console.log("file", file1)
+    fileData1 = file1;
+    this.setState({ fileSelected: file1 });
+    debugger;
+  };
+
+   onFileChange2 = (event2) => {
+     console.log("file2 selec")
+    let file2 = event2
+    const transId = this.props.getScrollYPositionValue ? this.props.getScrollYPositionValue.id : ''
+    let fileName2 = `${transId}_Barcode_image.${event2.name.split('.').pop()}`
+    file2 = new File([file2], fileName2, { type: file2.type });
+    console.log("file", file2)
+    fileData2 = file2;
+    this.setState({ fileSelected2: file2 });
+    debugger;
+  };
+
+
+  focusImageInput1 = () => {
+    this.faultImageInput.current.click()
+  }
+
+  focusImageInput2 = () => {
+    this.faultImageInput2.current.click()
+  }
+
+  setImageStep2(file) {
+    if (file) {
+      const step2ImageItem = [...this.props.step2ImageData, file].filter(item => item !== undefined && item !== "")
+      this.props.storeStep2Images(step2ImageItem)
+    }
+  }
+
+  // handleChangeStep2Image = ({ target }) => {
+  //   if (target && target.type === "file") {
+  //     if (this.checkMimeType(target)) {
+  //       if (target.files[0]) {
+  //         this.getImagePreviewUrl(target.files[0])
+  //         //this.setImageStep2(target.files[0])
+  //         this.onFileChange(target.files[0])
+  //       }
+  //     }
+  //     target.value = ''
+  //   }
+  // }
+
+    handleChangeStep2Image1 = ({ target }) => {
+        if (target && target.type === "file") {
+          if (this.checkMimeType(target)) {
+            if (target.files[0]) {
+              this.getImagePreviewUrl1(target.files[0])
+              //this.setImageStep2(target.files[0])
+              this.onFileChange1(target.files[0])
+            }
+          }
+          target.value = ''
+        }
+      }
+    
+    handleChangeStep2Image2 = ({ target }) => {
+        if (target && target.type === "file") {
+          if (this.checkMimeType(target)) {
+            if (target.files[0]) {
+              this.getImagePreviewUrl2(target.files[0])
+              //this.setImageStep2(target.files[0])
+              this.onFileChange2(target.files[0])
+            }
+          }
+          target.value = ''
+        }
+      }
+
+  getImagePreviewUrl1(file1) {
+    let reader = new FileReader()
+    reader.onloadend = () => {
+      this.setState({
+        inputFile: reader.result,
+        actualFile: file1
+      })
+    }
+    reader.readAsDataURL(file1)
+  }
+
+  getImagePreviewUrl2(file2) {
+    let reader2 = new FileReader()
+    reader2.onloadend = () => {
+      this.setState({
+        inputFile2: reader2.result,
+        actualFile2: file2
+      })
+    }
+    reader2.readAsDataURL(file2)
+  }
+
+  checkMimeType = (target) => {
+    //getting file object
+    let files = target.files
+    //define message container
+    let err = ''
+    // list allow mime type
+    const types = ['image/jpg', 'image/jpeg', 'image/png']
+    // loop access array
+    for (var x = 0; x < files.length; x++) {
+      // compare file type find doesn't matach
+      if (types.every(type => files[x].type !== type)) {
+        // create error message and assign to container
+        err +=
+          files[x].type +
+          ' is not a supported format. Only .jpg, .jpeg, and .png is allowed'
+      }
+    }
+
+    if (err !== '') {
+      // if message not same old that mean has error
+      target.value = null // discard selected file
+      alert(err)
+      console.log(err)
+      return false
+    }
+    return true
+  }
+
+  handleClose = () => {
+    fileData1 = ''
+    fileData2 = ''
+    var obj = {
+      show: false,
+      id: ''
+    }
+    this.setState({
+      inputFile: [],
+      inputFile2: [],
+      next: false
+    })
+    
+    this.props.storeScrollYPosition(obj)
+  }
+
+  handleCancel = () => {
+    // fileData = ''
+    fileData1 = ''
+    fileData2 = ''
+    var obj = {
+      show: false,
+      id: ''
+    }
+    this.setState({
+      successMsg: false,
+      next: false,
+      inputFile: [],
+      inputFile2: []
+    })
+    this.props.storeScrollYPosition(obj)
+    this.updateUser();
+  }
+
+  handleNext = () => {
+    this.setState({
+        next: true,
+      })
+  }
+
+  handleSubmit = async () => {
+    const temp = this.props.getScrollYPositionValue;
+    const value = temp.id;
+    if (this.state.inputFile2 !== undefined && this.state.inputFile2.length > 1) {
+
+      // delete notification.
+
+      const api = `https://ocrdemoapi2.azurewebsites.net/api/values?RefId=${value}`
+
+      const headers = {
+        'content-Type': 'application/json'
+      }
+
+      const data = axios.delete(
+        `${api}`,
+        { headers }).then(response => {
+          console.log("data", response)
+          this.props.getNotification().then(data => {
+          })
+        })
+      // const onFileUpload = async () => {
+
+      //const [blobList, setBlobList] = useState([]);
+      // *** UPLOAD TO AZURE STORAGE ***
+      //const blobsInContainer: string[] = await uploadFileToBlob(fileSelected);
+      console.log('aaaaaaaaaaaaf', fileData1);
+      console.log('aaaaaaaaaaaaf', fileData2);
+
+      
+      if(this.state.inputFile && this.state.inputFile.length > 0){
+        const blobsInContainer= await uploadFileToBlob(fileData1);
+        } 
+
+      const blobsInContainer2 = await uploadFileToBlob(fileData2);
+
+      // setBlobList(blobsInContainer);
+      // prepare UI for results
+      //this.state.blobList(blobsInContainer);
+
+
+      // delete notification   
+
+      //fileRename
+      // this.fileNameCall(value)
+
+      this.setState({
+        show: true,
+        inputFile: [],
+        inputFile2: [],
+        successMsg: true,
+        
+        blobList: [blobsInContainer2]
+      })
+      console.log("here it is"+this.state.blobList);
+    }
+  }
+
+
+  handleremoveImage1 = () => {
+    this.setState({
+      inputFile: []
+    })
+  }
+
+    handleremoveImage2 = () => {
+    this.setState({
+      inputFile2: []
+    })
+  }
+
+  // fileNameCall(){
+  //   let date = new Date();
+  //   let currentTime = moment(date).format('YYYYMMDDHHmmss')
+  //   let filename = `#_${currentTime}.${data['name'].split('.').pop()}`
+  //   formData.append('file', data, filename)
+  // }
+
+
+  render() {
+
+    const { getScrollYPositionValue } = this.props
+    const { listItems } = this.state
+    //debugger;
+    let DisplayMessage = <div className="awoinfo-container">
+      <div className="margin-top-small awoinfo-inner-container ln-u-padding-sides*2 ln-u-padding-bottom*4">
+        <p className="text-align-center">{`Thank you for attending Transaction id :${1234567}. Details are now captured`}</p>
+      </div>
+      
+      <NavLink onClick={this.cancelForm} to="/" activeClassName="is-active activeTab">
+        Open Notifications
+      </NavLink> </div>
+
+    return (
+      <div className="auth-wrapper">
+          <div className="auth-inner">
+      {getScrollYPositionValue && getScrollYPositionValue.show == false ?
+        
+            <div>
+          
+              {listItems && listItems.length > 0 ?
+                <h3>{`You have ${listItems.length} open transactions to attend`}</h3>
+                : ''}
+              {listItems && listItems.length == 0 ?
+                <div>
+                  <h3>You don't have any transactions to look</h3>
+                  {/* <img src={logo} alt="" className="App-logo" /> */}
+                </div>
+                : ''}
+            </div>
+        
+          : 
+            // <div className="auth-wrapper">
+            // <div className="auth-inner">
+            <div>{!this.state.next ? 
+                  <div>
+                    <div className="form-group">
+                      <label>Transaction Number</label>
+                      <input type="text" className="form-control" placeholder="Transaction Number" value={getScrollYPositionValue ? getScrollYPositionValue.id : ''} disabled />
+                    </div>
+                    <div className="form-group">
+                      {this.state.inputFile && this.state.inputFile.length == 0 ?
+                        <button className="btn btn-primary btn-block" onClick={this.onFileChange1} onClick={this.focusImageInput1} >Capture Problem Area</button>
+                      : ''}
+
+                      <input type="file" id="step3Image" style={{ display: 'none' }} onChange={this.handleChangeStep2Image1} accept=".jpg, .jpeg" ref={this.faultImageInput} />
+
+                      {this.state.inputFile && this.state.inputFile.length > 0 ?
+                        <div className="test-div"><img key={1} src={this.state.inputFile} width={"100%;"} id='imgtag' alt={`Image of fault ${1 + 1}   `} role="presentation" />
+                          <button type="button" className="icon-top-left" aria-label="Close" onClick={this.handleremoveImage1}>
+                            <span aria-hidden="true">&times;</span>
+                          </button>
+                        </div>
+                      : ''}
+                    </div>
+                    <button type="submit" className="btn btn-primary btn-block" onClick={this.handleNext}>Next</button>
+                    <button type="submit" className="btn btn-primary btn-block" onClick={this.handleClose}>Cancel</button>
+                  </div>:  <div> {this.state.next ? 
+                          // <div className="auth-wrapper">
+                          //   <div className="auth-inner">
+                              <div> <h3>OCR Trigger</h3>
+                                {!this.state.successMsg ?
+                                  <div>
+                                    <div className="form-group">
+                                      <label>Transaction Number</label>
+                                      <input type="text" className="form-control" placeholder="Transaction Number" value={getScrollYPositionValue ? getScrollYPositionValue.id : ''} disabled />
+                                    </div>
+                                    <div className="form-group">
+                                      {this.state.inputFile2 && this.state.inputFile2.length == 0 ?
+                                        <button className="btn btn-primary btn-block" onClick={this.onFileChange2} onClick={this.focusImageInput2} >Capture Barcode/Supplier Details</button>
+                                      : ''}
+
+                                      <input type="file" id="step3Image2" style={{ display: 'none' }} onChange={this.handleChangeStep2Image2} accept=".jpg, .jpeg" ref={this.faultImageInput2} />
+
+                                      {this.state.inputFile2 && this.state.inputFile2.length > 0 ?
+                                        <div className="test-div"><img key={2} src={this.state.inputFile2} width={"100%;"} id='imgtag2' alt={`Image of fault ${2 + 1}   `} role="presentation" />
+                                          <button type="button" className="icon-top-left" aria-label="Close" onClick={this.handleremoveImage2}>
+                                            <span aria-hidden="true">&times;</span>
+                                          </button>
+                                        </div>
+                                      : ''}
+                                    </div>
+                                    <button type="submit" className="btn btn-primary btn-block" onClick={this.handleSubmit}>Submit</button>
+                                    <button type="submit" className="btn btn-primary btn-block" onClick={this.handleClose}>Cancel</button>
+                                  </div>
+                                    :               
+                                <div>  
+                                  {this.state.successMsg ? 
+                                    <div>
+                                      <img src={logo} alt="" className="App-logo" />
+                                      <div class="alert alert-success" role="alert">
+                                        {`Notification Sent. OCR requested for Transaction id ${getScrollYPositionValue && getScrollYPositionValue.id}`}
+                                      </div>
+                                      <div style={{ textAlign: 'center' }}>
+                                        <Link className="navbar-brand" to={"/"} onClick={() => { this.handleCancel() }}>Home</Link>
+                                      </div>
+                                    </div>
+                                  : ''}</div>}
+                                
+                            
+        </div>:''}</div>}
+        </div>
+        // </div></div>
+          
+          
+        
+  }</div></div>
+        
+    )
+  }
+}
+
+
+const mapStateToProps = state => {
+  return {
+    getScrollYPositionValue: state.workOrderReducer && state.workOrderReducer.getScrollYPositionValue,
+    blobList:state.blobList,
+  }
+}
+
+const mapDispatchToProps = dispatch => {
+  return {
+    getNotification: () => dispatch(getNotification()),
+    storeScrollYPosition: payload => dispatch(storeScrollYPosition(payload)),
+  }
+}
+
+
+Home = connect(mapStateToProps, mapDispatchToProps)(Home)
+
+
+export default Home
